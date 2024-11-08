@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table Details</title>
+</head>
+<body>
+    <h1 id="tableName"></h1>
+    <table id="detailsTable" border="1">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Column Name</th>
+                <th>Type</th>
+                <th>Key</th>
+                <th>Primary Table</th>
+                <th>Secondary Table</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <button id="fetchDataButtonOfTable">Fetch Data</button>
+    <table id="data-table" border="1">
+        <thead></thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        // Function to get the table name from the URL
+        function getTableNameFromPath() {
+            return window.location.pathname.split('/').pop();
+        }
+
+        // Display the table name
+        const tableName = getTableNameFromPath();
+        document.getElementById('tableName').innerText = `Details for table: ${tableName}`;
+        
+        // Fetch and display table details
+        async function fetchTableDetails() {
+            const response = await fetch(`/tables/details/${encodeURIComponent(tableName)}`);
+            const data = await response.json();
+            
+            const tbody = document.getElementById('detailsTable').querySelector('tbody');
+            tbody.innerHTML = ''; // Clear previous data
+            
+            data.forEach(row => {
+                const newRow = tbody.insertRow();
+                newRow.insertCell().innerText = row.ID; // Assuming you have an ID field
+                newRow.insertCell().innerText = row.ColumnName;
+                newRow.insertCell().innerText = row.Type;
+                newRow.insertCell().innerText = row.Key;
+                newRow.insertCell().innerText = row.PrimaryTable;
+                newRow.insertCell().innerText = row.SecondaryTable;
+            });
+        }
+
+        // Call the function to fetch table details
+        fetchTableDetails();
+
+        async function fetchJoinedData() {
+            const tableName = document.getElementById('tableName').innerText.replace('Details for table: ', '');
+            const response = await fetch('/fetch-joined-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ primaryTable: tableName }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                constructTable(data);
+            } else {
+                alert('Error fetching data.');
+            }
+        }
+
+        // Function to construct the table
+        function constructTable(data) {
+            const tableHead = document.getElementById('data-table').querySelector('thead');
+            const tableBody = document.getElementById('data-table').querySelector('tbody');
+
+            // Clear previous data
+            tableHead.innerHTML = '';
+            tableBody.innerHTML = '';
+
+            // Create table header
+            if (data.length > 0) {
+                const headerRow = tableHead.insertRow();
+                Object.keys(data[0]).forEach(key => {
+                    const headerCell = document.createElement('th');
+                    headerCell.innerText = key;
+                    headerRow.appendChild(headerCell);
+                });
+
+                // Populate the table with data
+                data.forEach(row => {
+                    const newRow = tableBody.insertRow();
+                    Object.values(row).forEach(value => {
+                        const cell = newRow.insertCell();
+                        cell.innerText = value;
+                    });
+                });
+            } else {
+                const newRow = tableBody.insertRow();
+                const cell = newRow.insertCell();
+                cell.colSpan = 100; // Adjust to fit the number of columns
+                cell.innerText = 'No data available';
+            }
+        }
+
+        // Event listener for the fetch button
+        document.getElementById('fetchDataButton').addEventListener('click', fetchJoinedData);
+
+        // Display the table name from URL
+        document.getElementById('tableName').innerText = `Details for table: ${tableName}`;
+    </script>
+</body>
+</html>

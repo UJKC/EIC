@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PostgreSQL Connectivity Check</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: orange;
+            /* Light background */
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #007bff;
+            /* Bright blue */
+            margin-bottom: 10px;
+        }
+
+        h2 {
+            color: #6c757d;
+            /* Gray for subheadings */
+            margin-bottom: 10px;
+        }
+
+        button {
+            background-color: #28a745;
+            /* Green */
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-right: 10px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #218838;
+            /* Darker green */
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #dee2e6;
+        }
+
+        th {
+            background-color: #007bff;
+            /* Bright blue */
+            color: white;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+            /* Light gray for even rows */
+        }
+
+        tr:nth-child(odd) {
+            background-color: #ffffff;
+            /* White for odd rows */
+        }
+
+        tr:hover {
+            background-color: #e2e6ea;
+            /* Light gray on hover */
+        }
+
+        input[type="file"] {
+            margin: 20px 0;
+        }
+
+        pre {
+            background-color: #e9ecef;
+            /* Light gray for code blocks */
+            padding: 10px;
+            border-radius: 5px;
+            overflow: auto;
+        }
+
+        .container {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #ffffff;
+            /* White background for containers */
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #uploadForm {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+    <script>
+        let editMode = false;
+
+        async function checkDatabase() {
+            const response = await fetch('/check-db');
+            const result = await response.json();
+            document.getElementById('result').innerText = result.message;
+        }
+
+        async function fetchData() {
+            const response = await fetch('/all-tables');
+            const data = await response.json();
+            const table = document.getElementById('data-table');
+
+            table.innerHTML = '';
+
+            const header = table.createTHead();
+            const headerRow = header.insertRow();
+            const headerCell = headerRow.insertCell();
+            headerCell.innerText = 'Primary Table';
+
+            const tbody = table.createTBody();
+            data.forEach(row => {
+                const newRow = tbody.insertRow();
+                const tableCell = newRow.insertCell();
+                tableCell.innerText = row.PrimaryTable;
+
+                const deleteCell = newRow.insertCell();
+                const deleteIcon = document.createElement('span');
+                deleteIcon.innerText = '-';
+                deleteIcon.style.display = 'none';
+                deleteCell.appendChild(deleteIcon);
+
+                newRow.addEventListener('click', async () => {
+                    const tableName = row.PrimaryTable;
+                    window.open(`/tables/${encodeURIComponent(tableName)}`, '_blank');
+                });
+
+                deleteIcon.addEventListener('click', async (event) => {
+                    event.stopPropagation();
+                    const tableName = row.PrimaryTable;
+
+                    const confirmed = confirm(`Are you sure you want to delete the table: ${tableName}?`);
+                    if (confirmed) {
+                        try {
+                            const response = await fetch(`/delete/table`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ tableName }),
+                            });
+
+                            if (response.ok) {
+                                alert(`Table ${tableName} deleted successfully.`);
+                                fetchData();
+                            } else {
+                                const errorResult = await response.json();
+                                alert(`Error deleting table: ${errorResult.message}`);
+                            }
+                        } catch (error) {
+                            alert('Error deleting table: ' + error.message);
+                        }
+                    }
+                });
+            });
+        }
+
+        function toggleEditMode() {
+            editMode = !editMode;
+            const deleteIcons = document.querySelectorAll('#data-table tbody span');
+            const actionHeader = document.getElementById('actionHeader');
+
+            if (editMode) {
+                const headerRow = document.querySelector('#data-table thead tr');
+                const actionHeaderCell = document.createElement('th');
+                actionHeaderCell.id = 'actionHeader';
+                actionHeaderCell.innerText = 'Action';
+                headerRow.appendChild(actionHeaderCell);
+
+                deleteIcons.forEach(icon => {
+                    icon.style.display = 'inline';
+                });
+            } else {
+                if (actionHeader) {
+                    actionHeader.remove();
+                }
+
+                deleteIcons.forEach(icon => {
+                    icon.style.display = 'none';
+                });
+            }
+        }
+
+        async function uploadFile(event) {
+            event.preventDefault();
+            const fileInput = document.getElementById('fileInput');
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const result = await response.json();
+            document.getElementById('resultofheader').innerText = JSON.stringify(result.headers, null, 2);
+            createForm(result.headers);
+        }
+
+        async function createForm(headers) {
+            const formContainer = document.getElementById('formContainer');
+            formContainer.innerHTML = '';
+
+            const tableNameInput = document.createElement('input');
+            tableNameInput.placeholder = 'Table Name';
+            tableNameInput.required = true;
+            formContainer.appendChild(tableNameInput);
+            formContainer.appendChild(document.createElement('br'));
+
+            const summaryTable = document.createElement('table');
+            summaryTable.id = 'summaryTable';
+            summaryTable.innerHTML = `
+                <tr>
+                    <th>ID</th>
+                    <th>Column Name</th>
+                    <th>Type</th>
+                    <th>Key</th>
+                    <th>Primary Table</th>
+                    <th>Secondary Table</th>
+                </tr>
+            `;
+            formContainer.appendChild(summaryTable);
+
+            const tablesResponse = await fetch('/all-tables');
+            const tablesData = await tablesResponse.json();
+            const tables = tablesData.map(row => row.PrimaryTable);
+
+            headers.forEach((header, index) => {
+                const row = document.createElement('tr');
+
+                const idCell = document.createElement('td');
+                idCell.textContent = index + 1;
+                row.appendChild(idCell);
+
+                const nameCell = document.createElement('td');
+                nameCell.textContent = header;
+                row.appendChild(nameCell);
+
+                const typeCell = document.createElement('td');
+                const typeSelect = document.createElement('select');
+                typeSelect.id = `type_${index}`;
+                ['character varying', 'integer', 'date'].forEach(type => {
+                    const option = document.createElement('option');
+                    option.value = type;
+                    option.textContent = type;
+                    typeSelect.appendChild(option);
+                });
+                typeCell.appendChild(typeSelect);
+                row.appendChild(typeCell);
+
+                const keyCell = document.createElement('td');
+                const keySelect = document.createElement('select');
+                keySelect.id = `key_${index}`;
+                const normalOption = document.createElement('option');
+                normalOption.value = 'normal';
+                normalOption.textContent = 'normal';
+                keySelect.appendChild(normalOption);
+
+                ['primary key', 'secondary'].forEach(key => {
+                    const option = document.createElement('option');
+                    option.value = key;
+                    option.textContent = key;
+                    keySelect.appendChild(option);
+                });
+                keyCell.appendChild(keySelect);
+                row.appendChild(keyCell);
+
+                const primaryTableCell = document.createElement('td');
+                primaryTableCell.textContent = tableNameInput.value;
+                row.appendChild(primaryTableCell);
+
+                const secondaryTableCell = document.createElement('td');
+                const secondarySelect = document.createElement('select');
+                secondarySelect.id = `secondary_${index}`;
+                secondarySelect.style.display = 'none';
+
+                tables.forEach(table => {
+                    const option = document.createElement('option');
+                    option.value = table;
+                    option.textContent = table;
+                    secondarySelect.appendChild(option);
+                });
+
+                keySelect.addEventListener('change', function () {
+                    if (this.value === 'secondary') {
+                        secondarySelect.style.display = 'block';
+                    } else {
+                        secondarySelect.style.display = 'none';
+                    }
+                    primaryTableCell.textContent = tableNameInput.value;
+                });
+
+                secondaryTableCell.appendChild(secondarySelect);
+                row.appendChild(secondaryTableCell);
+
+                summaryTable.appendChild(row);
+            });
+
+            const submitButton = document.createElement('button');
+            submitButton.textContent = 'Submit';
+            submitButton.onclick = async (event) => {
+                event.preventDefault();
+                const isValid = validatePrimaryKey(summaryTable);
+                if (isValid) {
+                    await showSummary();
+                } else {
+                    alert('Error: At least one primary key must be specified.');
+                }
+            };
+            formContainer.appendChild(submitButton);
+        }
+
+        function validatePrimaryKey(summaryTable) {
+            const keySelects = summaryTable.querySelectorAll('select[id^="key_"]');
+            return Array.from(keySelects).some(select => select.value === 'primary key');
+        }
+
+        function showSummary() {
+            const summaryContainer = document.getElementById('summaryContainer');
+            summaryContainer.innerHTML = ''; // Clear previous summary
+
+            const tableName = document.querySelector('input[placeholder="Table Name"]').value;
+            summaryContainer.innerHTML += `<strong>Primary Table:</strong> ${tableName}<br>`;
+
+            const summaryTable = document.getElementById('summaryTable');
+            const rows = summaryTable.rows;
+            for (let i = 1; i < rows.length; i++) { // Skip header
+                const row = rows[i];
+                const columnName = row.cells[1].textContent;
+                const type = row.cells[2].querySelector('select').value;
+                const key = row.cells[3].querySelector('select').value;
+                const secondaryTable = key === 'secondary' ? row.cells[5].querySelector('select').value : null;
+
+                summaryContainer.innerHTML += `
+                    <table border="1">
+                        <tr>
+                            <td>ID</td>
+                            <td>${i}</td>
+                        </tr>
+                        <tr>
+                            <td>Column Name</td>
+                            <td>${columnName}</td>
+                        </tr>
+                        <tr>
+                            <td>Type</td>
+                            <td>${type}</td>
+                        </tr>
+                        <tr>
+                            <td>Key</td>
+                            <td>${key}</td>
+                        </tr>
+                        <tr>
+                            <td>Primary Table</td>
+                            <td>${tableName}</td>
+                        </tr>
+                        <tr>
+                            <td>Secondary Table</td>
+                            <td>${secondaryTable || 'null'}</td>
+                        </tr>
+                    </table>
+                    <br>
+                `;
+            }
+            const submitButton = document.createElement('button');
+            submitButton.textContent = 'Submit';
+            submitButton.onclick = createTableConfirm; // Updated function name
+            formContainer.appendChild(submitButton);
+        }
+
+        async function createTableConfirm(event) {
+            event.preventDefault(); // Prevent form submission
+
+            const tableName = document.querySelector('input[placeholder="Table Name"]').value.replace(/ /g, '_');
+            const summaryTable = document.getElementById('summaryTable');
+            const rows = summaryTable.rows;
+
+            const formData = [];
+
+            for (let i = 1; i < rows.length; i++) { // Skip header
+                const row = rows[i];
+                const columnName = row.cells[1].textContent;
+                const type = row.cells[2].querySelector('select').value;
+                const key = row.cells[3].querySelector('select').value;
+                const secondaryTable = key === 'secondary' ? row.cells[5].querySelector('select').value : null;
+
+                formData.push({
+                    columnName,
+                    type,
+                    key,
+                    primaryTable: tableName,
+                    secondaryTable,
+                });
+            }
+
+            // Send form data to backend
+            const response = await fetch('/create-table', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ tableName, columns: formData }),
+            });
+
+            const result = await response.json();
+            if (response.ok) {
+                alert('Table created successfully!');
+                const formContainer = document.getElementById('UploadExcelAfterCreation');
+
+                // Add file input for Excel upload
+                const excelInput = document.createElement('input');
+                excelInput.type = 'file';
+                excelInput.accept = '.xlsx, .xls'; // Accept only Excel files
+                excelInput.id = 'excelUpload';
+                formContainer.appendChild(excelInput);
+                formContainer.appendChild(document.createElement('br')); // Add line break
+
+                // Optionally, add a submit button for uploading the Excel file
+                const uploadButton = document.createElement('button');
+                uploadButton.textContent = 'Upload Excel';
+                uploadButton.onclick = async (event) => {
+                    event.preventDefault(); // Prevent default form submission
+                    const file = excelInput.files[0];
+                    if (file) {
+                        // Handle the file upload
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('tableName', tableName);
+
+                        try {
+                            const response = await fetch('/upload-excel', {
+                                method: 'POST',
+                                body: formData,
+                            });
+
+                            if (response.ok) {
+                                const result = await response.json();
+                                alert('Excel file uploaded successfully: ' + result.message);
+                            } else {
+                                throw new Error('Upload failed');
+                            }
+                        } catch (error) {
+                            alert('Error uploading file: ' + error.message);
+                        }
+                    } else {
+                        alert('Please select a file to upload.');
+                    }
+                };
+                formContainer.appendChild(uploadButton);
+            } else {
+                alert('Error creating table: ' + result.message);
+            }
+        }
+
+        window.onload = fetchData;
+    </script>
+</head>
+
+<body>
+    <h1>PostgreSQL Connectivity Check</h1>
+    <div class="container">
+        <button onclick="checkDatabase()">Check Database Connection</button>
+        <pre id="result"></pre>
+    </div>
+
+    <div class="container" id="uploadForm">
+        <h2>Upload File</h2>
+        <input type="file" id="fileInput" required />
+        <button onclick="uploadFile(event)">Upload File</button>
+    </div>
+
+    <div class="container" id="formContainer"></div>
+    <div class="container" id="resultofheader"></div>
+
+    <div class="container" id="summaryContainer"></div>
+
+    <div class="container">
+        <h2>Tables</h2>
+        <button onclick="toggleEditMode()">Toggle Edit Mode</button>
+        <table id="data-table"></table>
+    </div>
+    <div id="UploadExcelAfterCreation"></div>
+</body>
+
+</html>

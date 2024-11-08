@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table Details</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        .container {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #fff;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        tr:hover {
+            background-color: #ddd;
+        }
+
+        input[type="text"],
+        input[type="file"],
+        input[type="submit"],
+        button {
+            padding: 10px;
+            margin-top: 5px;
+            width: calc(100% - 22px);
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        label {
+            margin-top: 10px;
+            display: block;
+        }
+
+        #checkbox-container {
+            margin: 15px 0;
+        }
+
+        #searchInput {
+            width: calc(100% - 22px);
+        }
+
+        #keys {
+            margin-top: 20px;
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .secondary-table {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1 id="tableName"></h1>
+        <div id="primaryKeysContainer"></div>
+        <div id="keys"></div>
+        <input type="text" id="searchInput" placeholder="Search..." />
+        <button id="fetchDataButton">Fetch Data</button>
+        <div id="checkbox-container"></div>
+    </div>
+
+    <div class="container">
+        <table id="data-table">
+            <thead></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div class="container" id="formContainer"></div>
+
+    <div class="container">
+        <h1>Insert into Table: <span id="currentTableName"></span></h1>
+        <div id="formContainertoinsert"></div>
+    </div>
+
+    <div class="container">
+        <h1>Upload Excel File</h1>
+        <input type="file" id="excelFileInput" accept=".xlsx, .xls" />
+        <button id="uploadExcelButton">Upload Excel</button>
+    </div>
+
+    <div class="container">
+        <h1>Upload with rules</h1>
+        <input type="file" id="excelFileInput" accept=".xlsx, .xls" />
+        <button id="uploadExcelButton">Upload Excel</button>
+    </div>
+
+    <div class="container">
+        <h1>Add Columns</h1>
+        <form id="add-column-form" action="/add-column/" method="POST">
+            <div id="form-rows"></div>
+            <button type="button" onclick="addRow()">+</button>
+            <input type="hidden" name="primaryTable" value="" id="primary-table-input">
+            <button type="submit">Submit</button>
+        </form>
+    </div>
+
+    <button id="loadDeleteColumnsForm">Delete Columns</button>
+    <div id="delete-columns-form"></div>
+
+    <button id="loadRenameColumnForm">Rename Column</button>
+    <div id="rename-column-form"></div>
+
+    <h2>Upload Excel File</h2>
+    <form id="upload-form">
+        <input type="file" id="file-input" accept=".xlsx" required />
+        <select id="rule-select" required>
+            <option value="">Select a Rule</option>
+            <!-- Options will be populated with rules from the server -->
+        </select>
+        <button type="submit">Upload</button>
+    </form>
+
+    <h2>Execute Rule</h2>
+    <form id="execute-rule-form">
+        <select id="rule-selectRule" required>
+            <option value="">Select a Rule</option>
+            <!-- Options will be populated with rules from the server -->
+        </select>
+        <div id="dynamic-args"></div>
+        <button type="submit">Execute Rule</button>
+    </form>
+
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Function to fetch data and construct the table
+            async function fetchJoinedData() {
+                const tableName = document.getElementById('tableName').innerText.replace('Details for table: ', '');
+                const response = await fetch('/fetch-joined-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ primaryTable: tableName }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json(); const lengthResponse = await fetch(`/table/details/${tableName}/length`);
+                    const lengthData = await lengthResponse.json();
+                    constructTable(data, lengthData.length);
+                } else {
+                    alert('Error fetching data.');
+                }
+            }
+
+            // Function to construct the table
+            function constructTable(data, columnCount) {
+                const tableHead = document.getElementById('data-table').querySelector('thead');
+                const tableBody = document.getElementById('data-table').querySelector('tbody');
+                const checkboxContainer = document.getElementById('checkbox-container');
+
+                // Clear previous data
+                tableHead.innerHTML = '';
+                tableBody.innerHTML = '';
+                checkboxContainer.innerHTML = '';
+
+                // Create table header
+                if (data.length > 0) {
+                    const headerRow = tableHead.insertRow();
+                    const columnKeys = Object.keys(data[0]); // Get keys for later use
+
+                    columnKeys.forEach((key, index) => {
+                        const headerCell = document.createElement('th');
+                        headerCell.innerText = key;
+                        headerRow.appendChild(headerCell);
+
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = true; // Default to checked
+                        checkbox.id = `checkbox-${key}`;
+                        checkboxContainer.appendChild(checkbox);
+                        checkboxContainer.appendChild(document.createTextNode(key)); // Label for the checkbox
+
+                        // Event listener to toggle column visibility
+                        checkbox.addEventListener('change', () => {
+                            const cells = tableBody.getElementsByTagName('tr');
+                            for (let row of cells) {
+                                const cell = row.cells[index]; // Use the index to hide/show the correct cell
+                                if (cell) {
+                                    cell.style.display = checkbox.checked ? '' : 'none'; // Show or hide cell
+                                }
+                            }
+                            // Also hide/show header cell
+                            headerCell.style.display = checkbox.checked ? '' : 'none';
+                        });
+                    });
+
+                    // Add a header for the Edit action
+                    const editHeaderCell = document.createElement('th');
+                    editHeaderCell.innerText = 'Action';
+                    headerRow.appendChild(editHeaderCell);
+
+                    // Populate the table with data
+                    data.forEach(async row => {
+                        const newRow = tableBody.insertRow();
+                        Object.values(row).forEach((value, index) => {
+                            const cell = newRow.insertCell();
+                            cell.innerText = value;
+
+                            // Shade columns after the specified length
+                            if (index >= columnCount) {
+                                cell.style.backgroundColor = 'lightgrey'; // Shade cell
+                            }
+                        });
+
+                        // Create Edit button
+                        const editCell = newRow.insertCell();
+                        const editButton = document.createElement('button');
+                        editButton.innerText = 'Edit';
+                        editCell.appendChild(editButton);
+
+                        const deleteCell = newRow.insertCell();
+                        const deleteButton = document.createElement('button');
+                        deleteButton.innerText = 'Delete';
+                        deleteCell.appendChild(deleteButton);
+
+                        // Add event listener for Edit button
+                        editButton.addEventListener('click', async () => {
+                            // Create an object to hold the key-value pairs
+                            const rowData = {};
+                            Object.entries(row).forEach(([key, value]) => {
+                                rowData[key] = value; // Store each key-value pair
+                            });
+
+                            // Create the alert message for confirmation
+                            let alertMessage = 'Edit Row:\n';
+                            Object.entries(rowData).forEach(([key, value]) => {
+                                alertMessage += `${key}: ${value}\n`;
+                            });
+
+                            // Show confirm dialog
+                            const confirmed = confirm(alertMessage + " Would you like to edit this row?");
+                            if (confirmed) {
+                                const tableName = document.getElementById('tableName').innerText.replace('Details for table: ', '');
+                                const primaryKeyColumn = await fetchPrimaryKeys(tableName);
+                                const primaryKeyValue = rowData[primaryKeyColumn];
+
+                                const lengthResponse = await fetch(`/table/details/${tableName}/length`);
+                                const lengthData = await lengthResponse.json();
+                                const length = lengthData.length;
+
+                                createForm(rowData, length, primaryKeyColumn);
+                            } else {
+                                alert('Edit canceled.');
+                            }
+                        });
+
+                        deleteButton.addEventListener('click', async () => {
+                            const rowData = {};
+                            Object.entries(row).forEach(([key, value]) => {
+                                rowData[key] = value; // Store each key-value pair
+                            });
+
+                            let alertMessage = 'Delete Row:\n';
+                            Object.entries(rowData).forEach(([key, value]) => {
+                                alertMessage += `${key}: ${value}\n`;
+                            });
+
+                            const confirmed = confirm(alertMessage + " Would you like to delete this row?");
+                            if (confirmed) {
+                                const tableName = document.getElementById('tableName').innerText.replace('Details for table: ', '');
+                                const primaryKeyColumn = await fetchPrimaryKeys(tableName);
+                                const primaryKeyValue = rowData[primaryKeyColumn];
+
+                                const response = await fetch(`/table/${tableName}/delete/${primaryKeyColumn}/${primaryKeyValue}`, {
+                                    method: 'DELETE'
+                                });
+
+                                const data = await response.json();
+                                alert(data.message);
+                            } else {
+                                alert('Delete canceled.');
+                            }
+                        });
+                    });
+
+                    searchInput.addEventListener('keyup', () => {
+                        const filter = searchInput.value.toLowerCase();
+                        const rows = tableBody.getElementsByTagName('tr');
+                        for (let i = 0; i < rows.length; i++) {
+                            const cells = rows[i].getElementsByTagName('td');
+                            let rowContainsFilterText = false;
+
+                            for (let j = 0; j < cells.length - 1; j++) { // Exclude the action column
+                                const cell = cells[j];
+                                if (cell) {
+                                    if (cell.innerText.toLowerCase().indexOf(filter) > -1) {
+                                        rowContainsFilterText = true;
+                                        break; // No need to check other cells
+                                    }
+                                }
+                            }
+
+                            rows[i].style.display = rowContainsFilterText ? '' : 'none'; // Show or hide row
+                        }
+                    });
+                } else {
+                    const newRow = tableBody.insertRow();
+                    const cell = newRow.insertCell();
+                    cell.colSpan = 100; // Adjust to fit the number of columns
+                    cell.innerText = 'No data available';
+                }
+            }
+
+
+            // Event listener for the fetch button
+            document.getElementById('fetchDataButton').addEventListener('click', fetchJoinedData);
+
+            // Display the table name from URL
+            var tableName = window.location.pathname.split('/').pop(); // Get table name from URL
+            document.getElementById('tableName').innerText = `Details for table: ${tableName}`;
+
+            fetchPrimaryKeys(tableName)
+            fetchSecondaryKeys(tableName)
+            fetchColumnNames(tableName)
+            fetchRulesForSelect();
+            fetchRulesForSelectRule();
+            document.addEventListener('DOMContentLoaded', fetchRulesForSelectRule);
+
+        });
+
+        async function fetchPrimaryKeys(tableName) {
+            const response = await fetch(`/table/details/${tableName}/primary`);
+            const primaryKeysContainer = document.getElementById('primaryKeysContainer');
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Primary Keys:', data.secondaryKey);
+
+                // Clear previous primary keys
+                primaryKeysContainer.innerHTML = '';
+
+                // Display primary keys
+                if (data.secondaryKey.length > 0) {
+                    primaryKeysContainer.innerHTML = 'Primary Key: ' + data.secondaryKey;
+                } else {
+                    primaryKeysContainer.innerHTML = 'No primary keys found.';
+                }
+
+                return data.secondaryKey; // Use this as needed
+            } else {
+                alert('Error fetching primary keys.');
+                return [];
+            }
+        }
+
+        async function fetchSecondaryKeys(tableName) {
+            try {
+                const response = await fetch(`/table/details/${tableName}/secondary`);
+
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+
+                const data = await response.json();
+                const secondaryKeys = data.secondaryKeys;
+                console.log(secondaryKeys)
+
+                // Display keys on the webpage
+                const keysDiv = document.getElementById('keys');
+                keysDiv.innerHTML = '<h2>Secondary Keys:</h2>';
+                keysDiv.innerHTML += `<ul>${secondaryKeys.map(key => `<li>${key}</li>`).join('')}</ul>`;
+            } catch (error) {
+                console.error('Error fetching secondary keys:', error);
+                document.getElementById('keys').innerHTML = '<p>Error fetching keys. Please try again.</p>';
+            }
+        }
+
+        document.getElementById('uploadExcelButton').addEventListener('click', async () => {
+            const fileInput = document.getElementById('excelFileInput');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('Please select an Excel file to upload.');
+                return;
+            }
+
+            var tableName = window.location.pathname.split('/').pop(); // Get the table name from URL
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('tableName', tableName); // Append the table name
+
+            try {
+                const response = await fetch('/upload-excel', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message); // Show success message
+                } else {
+                    const errorResult = await response.json();
+                    alert('Error: ' + errorResult.message); // Show error message
+                }
+            } catch (error) {
+                alert('Error uploading file: ' + error.message);
+            }
+        });
+
+        function createForm(rowData, columnCount, primaryKeyColumn) {
+            var tableName = window.location.pathname.split('/').pop();
+            const formContainer = document.getElementById('formContainer');
+            console.log(primaryKeyColumn)// Ensure this element exists
+            formContainer.innerHTML = ''; // Clear previous form
+
+            const form = document.createElement('form');
+            form.action = `/table/${tableName}/update/row/`; // Set the action to the desired endpoint
+            form.method = 'POST'; // Use POST method for updating
+
+            // Loop through rowData and create input fields up to the columnCount
+            Object.keys(rowData).forEach((key, index) => {
+                if (index < columnCount) { // Only include fields up to columnCount
+                    const input = document.createElement('input');
+                    input.name = key;
+
+                    // Disable the input for the primary key column
+                    if (key === primaryKeyColumn) {
+                        input.disabled = true; // Prevent editing
+                    }
+
+                    input.value = rowData[key];
+
+                    const label = document.createElement('label');
+                    label.innerText = key;
+                    form.appendChild(label);
+                    form.appendChild(input);
+                }
+            });
+
+            // Add a hidden field for the primary key
+            var primaryKeyInput = document.createElement('input');
+            primaryKeyInput.type = 'hidden';
+            primaryKeyInput.name = primaryKeyColumn;
+            primaryKeyInput.value = rowData[primaryKeyColumn]; // Set the value from rowData
+            form.appendChild(primaryKeyInput);
+
+            var primaryKeyInput = document.createElement('input');
+            primaryKeyInput.type = 'hidden';
+            primaryKeyInput.name = "primaryKeyColumn";
+            primaryKeyInput.value = primaryKeyColumn; // Set the value from rowData
+            form.appendChild(primaryKeyInput);
+
+            var primaryKeyInput = document.createElement('input');
+            primaryKeyInput.type = 'hidden';
+            primaryKeyInput.name = "tableName";
+            primaryKeyInput.value = tableName; // Set the value from rowData
+            form.appendChild(primaryKeyInput);
+
+            // Submit button
+            const submitButton = document.createElement('button');
+            submitButton.type = 'submit';
+            submitButton.innerText = 'Update Row';
+            form.appendChild(submitButton);
+
+            formContainer.appendChild(form);
+        }
+
+        async function fetchColumnNames(tableName) {
+            const response = await fetch(`/tables/details/${tableName}/columns`);
+            if (response.ok) {
+                const columnNames = await response.json();
+                console.log("columnNames" + columnNames)
+                createInsertForm(columnNames);
+            } else {
+                alert('Error fetching column names.');
+            }
+        }
+
+        function createInsertForm(columnNames) {
+            var tableName = window.location.pathname.split('/').pop();
+            const formContainer = document.getElementById('formContainertoinsert');
+            formContainer.innerHTML = ''; // Clear previous form
+
+            const form = document.createElement('form');
+            form.action = `/tables/${tableName}/insert`; // Set the action for the form
+            form.method = 'POST'; // Set the method to POST
+
+            columnNames.forEach((columnName) => {
+                const label = document.createElement('label');
+                label.innerText = columnName;
+                const input = document.createElement('input');
+                input.name = columnName; // Set input name to column name
+
+                form.appendChild(label);
+                form.appendChild(input);
+                form.appendChild(document.createElement('br')); // Line break for better layout
+            });
+
+            formContainer.appendChild(form);
+
+            const submitButton = document.createElement('button');
+            submitButton.type = 'submit';
+            submitButton.innerText = 'Insert Row';
+            form.appendChild(submitButton);
+        }
+
+        function addRow() {
+            var tableName = window.location.pathname.split('/').pop();
+            document.getElementById('primary-table-input').value = tableName;
+            const row = document.createElement('div');
+            row.innerHTML = `
+                <input type="text" name="columnName[]" placeholder="Column Name" required>
+                <select name="keyType[]" onchange="handleKeyTypeChange(this)">
+                    <option value="primary key">Primary Key</option>
+                    <option value="secondary">Secondary</option>
+                    <option value="normal">Normal</option>
+                </select>
+                <select name="secondaryTable[]" class="secondary-table" style="display:none;"></select>
+                <select name="type[]" required>
+                    <option value="varchar">Varchar</option>
+                    <option value="date">Date</option>
+                    <option value="integer">Integer</option>
+                </select>
+                <button type="button" onclick="removeRow(this)">Remove</button>
+            `;
+            document.getElementById('form-rows').appendChild(row);
+        }
+
+        function removeRow(button) {
+            button.parentElement.remove();
+        }
+
+        function handleKeyTypeChange(select) {
+            const secondaryTableSelect = select.parentElement.querySelector('.secondary-table');
+            if (select.value === 'secondary') {
+                fetch('/all-tables')
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (Array.isArray(data)) {
+                            // Extract table names from the JSON structure
+                            secondaryTableSelect.innerHTML = data.map(item => `<option value="${item.PrimaryTable}">${item.PrimaryTable}</option>`).join('');
+                            secondaryTableSelect.style.display = 'block';
+                        } else {
+                            console.error('Unexpected data structure:', data);
+                        }
+                    })
+                    .catch(error => console.error('Fetch error:', error));
+            } else {
+                secondaryTableSelect.style.display = 'none';
+                secondaryTableSelect.innerHTML = '';
+            }
+        }
+
+        $('#loadDeleteColumnsForm').click(function () {
+            var tableName = window.location.pathname.split('/').pop(); // Replace with your logic to get the table name
+            $.get(`/tables/${tableName}/get`, function (data) {
+                $('#delete-columns-form').html(data);
+            });
+        });
+
+        $('#loadRenameColumnForm').click(function () {
+            var tableName = window.location.pathname.split('/').pop(); // Replace with your logic to get the table name
+            $.get(`/tables/${tableName}/alter`, function (data) {
+                $('#rename-column-form').html(data);
+            });
+        });
+
+        async function fetchRulesForSelect() {
+            try {
+                const response = await fetch('/rules');
+                const rules = await response.json();
+                const ruleSelect = document.getElementById('rule-select');
+
+                rules.forEach(rule => {
+                    const option = document.createElement('option');
+                    option.value = rule.id; // Set the option value to the rule ID
+                    option.textContent = `${rule.table_name}: ${rule.rule}`; // Display table name and rule
+                    ruleSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error fetching rules:', error);
+            }
+        }
+
+        document.getElementById('upload-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData();
+            const fileInput = document.getElementById('file-input');
+            const ruleSelect = document.getElementById('rule-select');
+
+            formData.append('file', fileInput.files[0]);
+            formData.append('tableName', window.location.pathname.split('/').pop());
+            formData.append('ruleId', ruleSelect.value);
+
+            const response = await fetch('/reupload', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (response.ok) {
+                alert('File uploaded and processed successfully');
+            } else {
+                alert('Error processing file');
+            }
+        });
+
+        async function fetchRulesForSelectRule() {
+            try {
+                const response = await fetch('/rules');
+                const rules = await response.json();
+                const ruleSelect = document.getElementById('rule-selectRule'); // Updated ID
+
+                rules.forEach(rule => {
+                    const option = document.createElement('option');
+                    option.value = rule.id; // Set the option value to the rule ID
+                    option.textContent = `${rule.table_name}: ${rule.rule}`; // Display table name and rule
+                    ruleSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error fetching rules:', error);
+            }
+        }
+
+        document.getElementById('rule-selectRule').addEventListener('change', async (event) => {
+            const ruleId = event.target.value;
+            const dynamicArgsContainer = document.getElementById('dynamic-args');
+
+            // Clear any existing input fields
+            dynamicArgsContainer.innerHTML = '';
+
+            if (ruleId) {
+                try {
+                    const response = await fetch(`/rules/${ruleId}`);
+                    const rule = await response.json();
+
+                    // Create input fields based on the argument count
+                    for (let i = 0; i < rule.argument; i++) {
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.placeholder = `Argument ${i + 1}`;
+                        input.name = `arg${i + 1}`; // Name for form data
+                        dynamicArgsContainer.appendChild(input);
+                    }
+                } catch (error) {
+                    console.error('Error fetching rule details:', error);
+                }
+            }
+        });
+
+        document.getElementById('execute-rule-form').addEventListener('submit', async (event) => {
+            event.preventDefault(); // Prevent default form submission
+
+            const ruleId = document.getElementById('rule-selectRule').value; // Updated ID
+            console.log("ruleId" + ruleId)
+            const formData = new FormData(event.target);
+            const args = [];
+
+            for (const [key, value] of formData.entries()) {
+                if (key.startsWith('arg')) { // Check if the key is an argument
+                    args.push(value); // Push the argument value to the args array
+                }
+            }
+            console.log("args" + args)
+
+            try {
+                const response = await fetch(`/execute-rule`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ ruleId, args }),
+                });
+
+                if (response.ok) {
+                    alert('Rule executed successfully');
+                } else {
+                    alert('Error executing rule');
+                }
+            } catch (error) {
+                console.error('Error executing rule:', error);
+            }
+        });
+
+    </script>
+</body>
+
+</html>
